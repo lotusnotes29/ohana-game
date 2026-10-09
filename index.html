@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OHANA Card Game - เกมการ์ดสายปาร์ตี้ฮาๆ</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            gold: '#f59e0b',
+                            red: '#ef4444',
+                            purple: '#8b5cf6',
+                            dark: '#0f172a',
+                            cardBg: '#1e293b'
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'bounce-short': 'bounce 0.8s infinite',
+                        'flip': 'flip 0.6s ease-in-out'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome & Google Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        * {
+            font-family: 'Kanit', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Perspective for 3D Card Animation */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #f59e0b;
+        }
+
+        /* Card Glow effects */
+        .card-glow-red {
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.6);
+        }
+        .card-glow-gold {
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.6);
+        }
+        .card-glow-purple {
+            box-shadow: 0 0 25px rgba(139, 92, 246, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-amber-500 selection:text-slate-900">
+
+    <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-40 px-4 py-2.5">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-tr from-amber-500 to-red-600 text-slate-950 p-2 rounded-xl font-extrabold flex items-center justify-center shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-crown text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black bg-gradient-to-r from-amber-400 via-red-400 to-purple-400 bg-clip-text text-transparent">
+                        OHANA CARD GAME
+                    </h1>
+                    <p class="text-[10px] text-slate-400 font-medium tracking-wide">เกมการ์ดสายฮา ปาร์ตี้สุดแซ่บ (สูงสุด 20 คน)</p>
+                </div>
+            </div>
+
+            <!-- Room Badge & Active Mode -->
+            <div id="topRoomInfo" class="hidden flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+                <span class="text-xs text-slate-400">ห้อง: <strong id="displayRoomCode" class="text-amber-400 font-mono text-sm tracking-wider">------</strong></span>
+                <span class="text-slate-600">|</span>
+                <span id="displayUserRole" class="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300">
+                    -
+                </span>
+                <button onclick="leaveRoom()" class="text-xs text-red-400 hover:text-red-300 ml-1 pl-1 border-l border-slate-700">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Custom Rules Banner (Shows actively created King rules) -->
+    <div id="activeRulesBar" class="hidden bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs sm:text-sm text-amber-300 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-scroll text-amber-400 animate-pulse"></i>
+        <span><strong>กฎพิเศษปัจจุบัน:</strong> <span id="activeRulesText">ยังไม่มีกฎพิเศษบังคับใช้</span></span>
+    </div>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 flex flex-col">
+
+        <section id="setupSection" class="flex-1 flex flex-col items-center justify-center py-6">
+            <div class="w-full max-w-md bg-slate-900/90 border border-slate-800 p-6 rounded-2xl shadow-2xl backdrop-blur">
+                <div class="text-center mb-6">
+                    <div class="inline-flex p-4 bg-amber-500/10 text-amber-400 rounded-2xl mb-3 border border-amber-500/20">
+                        <i class="fa-solid fa-gamepad text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-black text-white">เข้าสู่ห้องเกม OHANA</h2>
+                    <p class="text-xs text-slate-400 mt-1">สร้างห้องใหม่ หรือเข้าร่วมเป็นผู้เล่น/กรรมการ (สูงสุด 20 คน)</p>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1">ชื่อของคุณ (Display Name)</label>
+                        <input type="text" id="playerNameInput" placeholder="เช่น พี่ซ่าน, น้าเน็ก, ตี๋" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-amber-500">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 pt-2">
+                        <button onclick="setMode('create')" id="btnTabCreate" class="py-2.5 rounded-xl font-bold text-sm border bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20">
+                            สร้างห้องใหม่
+                        </button>
+                        <button onclick="setMode('join')" id="btnTabJoin" class="py-2.5 rounded-xl font-bold text-sm border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700">
+                            เข้าร่วมห้อง
+                        </button>
+                    </div>
+
+                    <!-- CREATE ROOM FORM -->
+                    <div id="formCreate" class="space-y-4 pt-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">จำนวนผู้เล่นสูงสุด (2 - 20 คน)</label>
+                            <select id="maxPlayersSelect" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white">
+                                <option value="4">4 คน (วงขนาดเล็ก)</option>
+                                <option value="8">8 คน (วงมาตรฐาน)</option>
+                                <option value="12" selected>12 คน (ปาร์ตี้สนุกๆ)</option>
+                                <option value="16">16 คน (แก๊งใหญ่)</option>
+                                <option value="20">20 คน (บิ๊กปาร์ตี้)</option>
+                            </select>
+                        </div>
+                        <button onclick="handleCreateRoom()" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-red-500 hover:from-amber-400 hover:to-red-400 text-slate-950 font-black rounded-xl shadow-lg transition transform active:scale-95">
+                            <i class="fa-solid fa-plus-circle mr-1"></i> ยืนยันการสร้างห้อง
+                        </button>
+                    </div>
+
+                    <!-- JOIN ROOM FORM -->
+                    <div id="formJoin" class="space-y-4 pt-2 hidden">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">รหัสห้อง (Room Code)</label>
+                            <input type="text" id="roomCodeInput" placeholder="กรอกรหัส 6 หลัก" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase font-mono tracking-wider focus:outline-none focus:border-amber-500">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 mb-1">เข้าร่วมในฐานะ (Select Role)</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl p-3 cursor-pointer hover:border-amber-500">
+                                    <input type="radio" name="roleChoice" value="player" checked class="accent-amber-500">
+                                    <div class="text-xs">
+                                        <div class="font-bold text-white"><i class="fa-solid fa-user-ninja text-amber-400 mr-1"></i> ผู้เล่น</div>
+                                        <div class="text-[10px] text-slate-400">ร่วมจั่วการ์ดและโดนบทลงโทษ</div>
+                                    </div>
+                                </label>
+                                <label class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl p-3 cursor-pointer hover:border-purple-500">
+                                    <input type="radio" name="roleChoice" value="judge" class="accent-purple-500">
+                                    <div class="text-xs">
+                                        <div class="font-bold text-purple-300"><i class="fa-solid fa-scale-balanced text-purple-400 mr-1"></i> กรรมการ</div>
+                                        <div class="text-[10px] text-slate-400">ดูประวัติ/แจกแต้มบทลงโทษ</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button onclick="handleJoinRoom()" class="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl shadow-lg transition transform active:scale-95">
+                            <i class="fa-solid fa-door-open mr-1"></i> เข้าสู่ห้องเกม
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="lobbyWaitingSection" class="hidden flex-1 flex flex-col justify-between py-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-4">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            ห้องปาร์ตี้ <span id="lobbyRoomCode" class="text-amber-400 font-mono bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20">------</span>
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">แชร์รหัสห้องนี้ให้เพื่อนๆ เข้ามาร่วมเล่น (รองรับสูงสุด <span id="lobbyMaxCount">0</span> คน)</p>
+                    </div>
+                    <button onclick="copyRoomCode()" class="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 transition">
+                        <i class="fa-solid fa-copy mr-1.5 text-amber-400"></i> คัดลอกรหัสห้อง
+                    </button>
+                </div>
+
+                <!-- Players & Judges List -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-300 mb-3 flex items-center justify-between">
+                            <span><i class="fa-solid fa-users text-amber-400 mr-2"></i>รายชื่อผู้เล่น (Players)</span>
+                            <span id="playerCountBadge" class="text-xs bg-slate-800 text-amber-400 px-2 py-0.5 rounded-full font-mono">0/0</span>
+                        </h3>
+                        <div id="lobbyPlayerList" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1">
+                            <!-- Dynamic Player Cards -->
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-300 mb-3 flex items-center justify-between">
+                            <span><i class="fa-solid fa-gavel text-purple-400 mr-2"></i>กรรมการ & ผู้สังเกตการณ์ (Judges)</span>
+                            <span id="judgeCountBadge" class="text-xs bg-slate-800 text-purple-400 px-2 py-0.5 rounded-full font-mono">0</span>
+                        </h3>
+                        <div id="lobbyJudgeList" class="flex flex-wrap gap-2 max-h-60 overflow-y-auto p-1">
+                            <!-- Dynamic Judge Cards -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="hostLobbyControls" class="hidden text-center">
+                <button onclick="startGame()" class="w-full max-w-md py-4 bg-gradient-to-r from-amber-500 via-red-500 to-purple-600 text-slate-950 text-lg font-black rounded-2xl shadow-xl hover:brightness-110 transition transform active:scale-95">
+                    <i class="fa-solid fa-play mr-2"></i> เริ่มเกมเลย! (Start Game)
+                </button>
+            </div>
+            <div id="nonHostLobbyMessage" class="text-center text-slate-400 text-sm py-2 animate-pulse">
+                <i class="fa-solid fa-spinner fa-spin mr-2 text-amber-400"></i> รอหัวหน้าห้องกดเริ่มเกม...
+            </div>
+        </section>
+
+        <section id="gameplaySection" class="hidden flex-1 flex flex-col justify-between gap-4">
+
+            <!-- JUDGE / SPECTATOR DASHBOARD (Only visible to judges) -->
+            <div id="judgeDashboard" class="hidden bg-purple-950/40 border border-purple-800/50 rounded-2xl p-3 sm:p-4 mb-2">
+                <div class="flex items-center justify-between mb-3 border-b border-purple-800/40 pb-2">
+                    <div class="flex items-center gap-2 text-purple-300 font-bold text-sm">
+                        <i class="fa-solid fa-scale-balanced text-purple-400 text-lg"></i>
+                        <span>โหมดกรรมการ / สังเกตการณ์ (Judge & Spectator Feed)</span>
+                    </div>
+                    <span class="text-[11px] bg-purple-900/60 text-purple-200 px-2.5 py-0.5 rounded-full">เห็นประวัติการ์ดย้อนหลังสดๆ</span>
+                </div>
+
+                <!-- Real-time Judge Card Feed -->
+                <div id="judgeCardFeed" class="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                    <div class="text-xs text-purple-300/60 py-4 px-2 italic">ยังไม่มีการเปิดการ์ดเกิดขึ้นในห้องนี้...</div>
+                </div>
+            </div>
+
+            <!-- MAIN PLAYING ARENA -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
+
+                <!-- LEFT SIDE: ACTIVE PLAYERS GRID (Max 20 Support) -->
+                <div class="lg:col-span-8 bg-slate-900/70 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-users text-amber-400"></i> วงผู้เล่น (<span id="inGamePlayerCount">0</span> คน)
+                            </h3>
+                            <span id="turnIndicator" class="text-xs font-bold px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full animate-pulse">
+                                ตาของ: <span id="currentTurnName">-</span>
+                            </span>
+                        </div>
+
+                        <!-- GRID OF PLAYERS (Dynamic sizing) -->
+                        <div id="inGamePlayersGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[380px] sm:max-h-[460px] overflow-y-auto p-1">
+                            <!-- Player Cards Rendered Here -->
+                        </div>
+                    </div>
+
+                    <!-- Penalty & Action Controls Footer -->
+                    <div class="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                        <div>
+                            <i class="fa-solid fa-glass-water text-red-400 mr-1"></i> คลิกที่ปุ่ม <strong class="text-red-400">+1 โดนทำโทษ</strong> เพื่อเพิ่มบทลงโทษให้เพื่อน
+                        </div>
+                        <button onclick="resetDeckPrompt()" id="btnResetDeck" class="hidden text-amber-400 hover:text-amber-300 font-bold bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                            <i class="fa-solid fa-rotate-right mr-1"></i> สับกองไพ่ใหม่
+                        </button>
+                    </div>
+                </div>
+
+                <!-- RIGHT SIDE: THE DECK & CARD DRAWING AREA -->
+                <div class="lg:col-span-4 bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center relative min-h-[360px]">
+                    
+                    <div class="text-center mb-3">
+                        <span class="text-xs text-slate-400 font-semibold uppercase tracking-widest block">ไพ่ที่เหลือในกอง</span>
+                        <span id="deckCountBadge" class="text-2xl font-black text-amber-400 font-mono">52 / 52</span>
+                    </div>
+
+                    <!-- 3D FLIPPABLE DECK -->
+                    <div class="perspective-1000 my-2 cursor-pointer group" onclick="handleDrawCard()">
+                        <div id="cardDeckObject" class="w-44 h-64 sm:w-48 sm:h-72 rounded-2xl bg-gradient-to-br from-amber-600 via-red-600 to-purple-800 border-4 border-amber-300/40 shadow-2xl flex flex-col items-center justify-center p-4 transition transform duration-300 group-hover:scale-105 active:scale-95 relative">
+                            <!-- Card Back Graphic -->
+                            <div class="w-full h-full border-2 border-dashed border-amber-200/30 rounded-xl flex flex-col items-center justify-center p-2 text-center bg-slate-950/40">
+                                <i class="fa-solid fa-crown text-4xl text-amber-400 mb-2 drop-shadow-lg"></i>
+                                <span class="font-extrabold text-amber-200 text-lg tracking-wider">OHANA</span>
+                                <span class="text-[10px] text-amber-300/70 font-semibold mt-1">แตะเพื่อจั่วการ์ด</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DRAW BUTTON FOR MOBILE ENHANCEMENT -->
+                    <button id="btnDrawCard" onclick="handleDrawCard()" class="w-full mt-4 py-3 bg-gradient-to-r from-amber-500 to-red-500 text-slate-950 font-black rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition">
+                        <i class="fa-solid fa-hand-pointer mr-1.5"></i> จั่วการ์ดใบต่อไป
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="cardModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-amber-500/50 rounded-3xl p-6 max-w-md w-full shadow-2xl text-center transform transition-all animate-bounce-short">
+            
+            <div class="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">
+                เปิดได้โดย: <span id="modalDrawnBy" class="text-white font-extrabold text-sm">----</span>
+            </div>
+
+            <!-- BIG CARD PREVIEW -->
+            <div id="modalCardBox" class="my-4 mx-auto w-40 h-56 rounded-2xl bg-slate-800 border-2 border-slate-700 flex flex-col justify-between p-4 shadow-xl relative overflow-hidden">
+                <div class="flex justify-between items-start text-xl font-extrabold" id="modalTopCorner">
+                    <span>A</span><span>♠</span>
+                </div>
+                <div class="text-5xl my-auto text-center" id="modalCenterSuit">
+                    ♠
+                </div>
+                <div class="flex justify-between items-end text-xl font-extrabold rotate-180" id="modalBottomCorner">
+                    <span>A</span><span>♠</span>
+                </div>
+            </div>
+
+            <!-- CARD RULE TITLE & INSTRUCTIONS -->
+            <h3 id="modalRuleTitle" class="text-2xl font-black text-amber-300 mb-2">บทลงโทษเดี่ยว (Single Penalty)</h3>
+            <p id="modalRuleDescription" class="text-sm text-slate-300 leading-relaxed mb-6 bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+                คนที่จั่วได้ใบนี้ ต้องรับบทลงโทษไปเต็มๆ คนเดียว 1 ดื่ม/ทำภารกิจ!
+            </p>
+
+            <!-- ACTION BUTTONS / CUSTOM INPUT FOR KING -->
+            <div id="modalCustomInputBox" class="hidden mb-4">
+                <input type="text" id="customRuleInput" placeholder="พิมพ์กฎพิเศษ เช่น 'ห้ามพูดภาษาไทย'" class="w-full bg-slate-800 border border-amber-500/50 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none mb-2">
+                <button onclick="submitCustomRule()" class="w-full py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs">ตั้งกฎนี้เลย!</button>
+            </div>
+
+            <button onclick="closeCardModal()" class="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg transition">
+                รับทราบ / ไปตาถัดไป <i class="fa-solid fa-arrow-right ml-1"></i>
+            </button>
+        </div>
+    </div>
+
+    <footer class="bg-slate-900 border-t border-slate-800 py-3 text-center text-xs text-slate-500 px-4">
+        OHANA Party Web Card Game &bull; ออกแบบเพื่อความบันเทิงในวงปาร์ตี้ฮาๆ
+    </footer>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-amber-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl shadow-2xl transition transform translate-y-20 opacity-0 z-50 text-xs flex items-center gap-2">
+        <i class="fa-solid fa-circle-info"></i> <span id="toastMsg">ข้อความแจ้งเตือน</span>
+    </div>
+
+    <script>
+        // --- DECK & OHANA RULES DEFINITION ---
+        const SUITS = [
+            { symbol: '♠', color: 'text-slate-100', name: 'Spades' },
+            { symbol: '♥', color: 'text-red-500', name: 'Hearts' },
+            { symbol: '♦', color: 'text-red-500', name: 'Diamonds' },
+            { symbol: '♣', color: 'text-slate-100', name: 'Clubs' }
+        ];
+
+        const RANKS = [
+            { code: 'A', name: 'Ace', title: 'บทลงโทษเดี่ยว (Single Penalty)', desc: 'คนที่จั่วได้ใบนี้ รับบทลงโทษไปคนเดียวเต็มๆ 1 ดื่ม/ภารกิจ!' },
+            { code: '2', name: '2', title: 'หาเพื่อนร่วมชะตากรรม (+1)', desc: 'จั่วได้เลข 2 เลือกเพื่อน 1 คนมาร่วมรับบทลงโทษพร้อมกัน!' },
+            { code: '3', name: '3', title: 'แท็กทีม 3 คน (+2)', desc: 'จั่วได้เลข 3 เลือกเพื่อน 2 คนมาร่วมรับบทลงโทษพร้อมกัน!' },
+            { code: '4', name: '4', title: 'รอดตัว! (Safe)', desc: 'คุณโชคดีมาก! ไม่มีบทลงโทษในรอบนี้ ผ่านไปตาถัดไปได้เลย' },
+            { code: '5', name: '5', title: 'ห้าเฮฮา (Group Penalty)', desc: 'โดนทุกคน! ทั้งวงต้องรับบทลงโทษพร้อมกันหมดทุกคน!' },
+            { code: '6', name: '6', title: 'ทายหมวดหมู่ (Category)', desc: 'ตั้งหมวดหมู่คำศัพท์ วนให้ทุกคนพูดคำในหมวดนั้น ใครคิดไม่ออกหรือซ้ำ โดนลงโทษ!' },
+            { code: '7', name: '7', title: 'ดวลปอด (Longest Breath)', desc: 'ท้าดวลแข่งลากเสียงยาวกับเพื่อน 1 คน ใครเสียงหมดก่อนเป็นฝ่ายแพ้!' },
+            { code: '8', name: '8', title: 'คู่หูสายโดน (Drink Mate)', desc: 'เลือกเพื่อน 1 คนเป็น Mate ต่อจากนี้ถ้าคุณโดนทำโทษ เพื่อนคนนี้ต้องโดนด้วยเสมอ!' },
+            { code: '9', name: '9', title: 'มินิเกมประลองไว (Mini-Game)', desc: 'ทุกคนในวงต้องรีบทำท่าทาง หรือตอบคำถามสั้นๆ ใครทำช้าที่สุดโดนลงโทษ!' },
+            { code: '10', name: '10', title: 'กษัตริย์นิ้วชี้ (Thumb Master)', desc: 'ผู้จั่วจะได้เป็น Thumb Master เมื่อไหร่ที่เอานิ้วแตะโต๊ะ ทุกคนต้องทำตาม ช้าสุดโดน!' },
+            { code: 'J', name: 'Jack', title: 'จับหน้าฮาเฮ (Face Touch)', desc: 'ใครจั่วได้ J ให้เอามือจับหน้าตัวเอง คนอื่นต้องทำตามให้เร็วที่สุด ใครช้าสุดโดน!' },
+            { code: 'Q', name: 'Queen', title: 'แหม่มเพื่อนไม่คบ (Silent Treatment)', desc: 'คนจั่วได้ Q กลายเป็นคนโดนตัดขาด! ใครเผลอพูดคุยหรือตอบคำถามคนๆ นี้ โดนลงโทษทันที!' },
+            { code: 'K', name: 'King', title: 'ตั้งกฎพิสดาร (Custom Rule)', desc: 'สร้างกฎพิเศษใหม่ขึ้นมา 1 ข้อ (เช่น ห้ามชี้, ห้ามหัวเราะ) ใครฝ่าฝืนโดนลงโทษจนกว่าจะมี K ใบใหม่!' }
+        ];
+
+        // --- LOCAL STATE ---
+        let localUser = {
+            id: 'user_' + Math.random().toString(36).substring(2, 9),
+            name: '',
+            role: 'player', // 'player' or 'judge'
+            isHost: false,
+            penalties: 0
+        };
+
+        let currentRoom = {
+            code: '',
+            maxPlayers: 12,
+            players: [], // Array of player objects
+            judges: [],  // Array of judge objects
+            deck: [],    // Array of remaining cards
+            drawnCards: [], // History of drawn cards
+            currentTurnIndex: 0,
+            activeKingRule: '',
+            status: 'lobby' // 'lobby' or 'playing'
+        };
+
+        // --- DOM ELEMENTS ---
+        const setupSection = document.getElementById('setupSection');
+        const lobbyWaitingSection = document.getElementById('lobbyWaitingSection');
+        const gameplaySection = document.getElementById('gameplaySection');
+        const topRoomInfo = document.getElementById('topRoomInfo');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+
+        function showToast(msg) {
+            toastMsg.innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function setMode(mode) {
+            const btnCreate = document.getElementById('btnTabCreate');
+            const btnJoin = document.getElementById('btnTabJoin');
+            const formCreate = document.getElementById('formCreate');
+            const formJoin = document.getElementById('formJoin');
+
+            if (mode === 'create') {
+                btnCreate.className = 'py-2.5 rounded-xl font-bold text-sm border bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20';
+                btnJoin.className = 'py-2.5 rounded-xl font-bold text-sm border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700';
+                formCreate.classList.remove('hidden');
+                formJoin.classList.add('hidden');
+            } else {
+                btnJoin.className = 'py-2.5 rounded-xl font-bold text-sm border bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20';
+                btnCreate.className = 'py-2.5 rounded-xl font-bold text-sm border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700';
+                formJoin.classList.remove('hidden');
+                formCreate.classList.add('hidden');
+            }
+        }
+
+        // Generate full 52 cards deck
+        function createDeck() {
+            let deck = [];
+            for (let suit of SUITS) {
+                for (let rank of RANKS) {
+                    deck.push({
+                        suitSymbol: suit.symbol,
+                        suitColor: suit.color,
+                        suitName: suit.name,
+                        rankCode: rank.code,
+                        rankName: rank.name,
+                        ruleTitle: rank.title,
+                        ruleDesc: rank.desc
+                    });
+                }
+            }
+            // Fisher-Yates Shuffle
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        function handleCreateRoom() {
+            const nameInput = document.getElementById('playerNameInput').value.trim();
+            if (!nameInput) {
+                showToast('กรุณากรอกชื่อของคุณก่อนสร้างห้อง');
+                return;
+            }
+
+            localUser.name = nameInput;
+            localUser.isHost = true;
+            localUser.role = 'player';
+
+            const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const maxPlayers = parseInt(document.getElementById('maxPlayersSelect').value);
+
+            currentRoom = {
+                code: roomCode,
+                maxPlayers: maxPlayers,
+                players: [{ ...localUser }],
+                judges: [],
+                deck: createDeck(),
+                drawnCards: [],
+                currentTurnIndex: 0,
+                activeKingRule: '',
+                status: 'lobby'
+            };
+
+            saveToLocalStorage();
+            enterLobby();
+            showToast('สร้างห้องสำเร็จ! รหัสห้องคือ ' + roomCode);
+        }
+
+        function handleJoinRoom() {
+            const nameInput = document.getElementById('playerNameInput').value.trim();
+            const codeInput = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+            const roleChoice = document.querySelector('input[name="roleChoice"]:checked').value;
+
+            if (!nameInput) {
+                showToast('กรุณากรอกชื่อของคุณ');
+                return;
+            }
+            if (!codeInput) {
+                showToast('กรุณากรอกรหัสห้อง');
+                return;
+            }
+
+            localUser.name = nameInput;
+            localUser.role = roleChoice;
+            localUser.isHost = false;
+
+            // Retrieve or mock room state from localStorage for multi-tab simulation
+            const savedRoom = localStorage.getItem('ohana_room_' + codeInput);
+            if (savedRoom) {
+                currentRoom = JSON.parse(savedRoom);
+            } else {
+                // Initialize room if joining
+                currentRoom.code = codeInput;
+                currentRoom.maxPlayers = 12;
+                currentRoom.players = currentRoom.players || [];
+                currentRoom.judges = currentRoom.judges || [];
+                currentRoom.deck = currentRoom.deck.length ? currentRoom.deck : createDeck();
+            }
+
+            if (roleChoice === 'player') {
+                if (currentRoom.players.length >= currentRoom.maxPlayers) {
+                    showToast('ห้องนี้มีผู้เล่นเต็มแล้ว (' + currentRoom.maxPlayers + ' คน)');
+                    return;
+                }
+                if (!currentRoom.players.some(p => p.id === localUser.id)) {
+                    currentRoom.players.push({ ...localUser });
+                }
+            } else {
+                if (!currentRoom.judges.some(j => j.id === localUser.id)) {
+                    currentRoom.judges.push({ ...localUser });
+                }
+            }
+
+            saveToLocalStorage();
+            if (currentRoom.status === 'playing') {
+                enterGame();
+            } else {
+                enterLobby();
+            }
+            showToast('เข้าร่วมห้องสำเร็จ!');
+        }
+
+        function saveToLocalStorage() {
+            if (currentRoom.code) {
+                localStorage.setItem('ohana_room_' + currentRoom.code, JSON.stringify(currentRoom));
+            }
+        }
+
+        function enterLobby() {
+            setupSection.classList.add('hidden');
+            lobbyWaitingSection.classList.remove('hidden');
+            gameplaySection.classList.add('hidden');
+            topRoomInfo.classList.remove('hidden');
+
+            document.getElementById('displayRoomCode').innerText = currentRoom.code;
+            document.getElementById('lobbyRoomCode').innerText = currentRoom.code;
+            document.getElementById('lobbyMaxCount').innerText = currentRoom.maxPlayers;
+            document.getElementById('displayUserRole').innerText = localUser.role === 'judge' ? 'กรรมการ' : (localUser.isHost ? 'หัวหน้าห้อง' : 'ผู้เล่น');
+
+            if (localUser.isHost) {
+                document.getElementById('hostLobbyControls').classList.remove('hidden');
+                document.getElementById('nonHostLobbyMessage').classList.add('hidden');
+            } else {
+                document.getElementById('hostLobbyControls').classList.add('hidden');
+                document.getElementById('nonHostLobbyMessage').classList.remove('hidden');
+            }
+
+            renderLobbyLists();
+        }
+
+        function renderLobbyLists() {
+            const playerList = document.getElementById('lobbyPlayerList');
+            const judgeList = document.getElementById('lobbyJudgeList');
+            const playerCountBadge = document.getElementById('playerCountBadge');
+            const judgeCountBadge = document.getElementById('judgeCountBadge');
+
+            playerCountBadge.innerText = `${currentRoom.players.length}/${currentRoom.maxPlayers}`;
+            judgeCountBadge.innerText = currentRoom.judges.length;
+
+            playerList.innerHTML = currentRoom.players.map(p => `
+                <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <div class="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center shrink-0">
+                            ${p.name.charAt(0)}
+                        </div>
+                        <span class="font-bold text-slate-200 truncate">${p.name} ${p.isHost ? '<i class="fa-solid fa-crown text-amber-400 text-[10px]"></i>' : ''}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            judgeList.innerHTML = currentRoom.judges.map(j => `
+                <div class="bg-purple-900/30 border border-purple-700/50 rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs text-purple-300">
+                    <i class="fa-solid fa-gavel text-purple-400"></i>
+                    <span class="font-semibold">${j.name}</span>
+                </div>
+            `).join('');
+        }
+
+        function copyRoomCode() {
+            navigator.clipboard.writeText(currentRoom.code).then(() => {
+                showToast('คัดลอกรหัสห้องแล้ว: ' + currentRoom.code);
+            }).catch(() => {
+                showToast('รหัสห้อง: ' + currentRoom.code);
+            });
+        }
+
+        function startGame() {
+            if (currentRoom.players.length < 2) {
+                showToast('ต้องการผู้เล่นอย่างน้อย 2 คนเพื่อเริ่มเกม');
+                return;
+            }
+            currentRoom.status = 'playing';
+            saveToLocalStorage();
+            enterGame();
+        }
+
+        function enterGame() {
+            lobbyWaitingSection.classList.add('hidden');
+            gameplaySection.classList.remove('hidden');
+
+            if (localUser.role === 'judge') {
+                document.getElementById('judgeDashboard').classList.remove('hidden');
+            } else {
+                document.getElementById('judgeDashboard').classList.add('hidden');
+            }
+
+            renderGameplayUI();
+        }
+
+        function renderGameplayUI() {
+            // Update Turn Badge
+            const activePlayer = currentRoom.players[currentRoom.currentTurnIndex] || currentRoom.players[0];
+            document.getElementById('currentTurnName').innerText = activePlayer ? activePlayer.name : '-';
+            document.getElementById('inGamePlayerCount').innerText = currentRoom.players.length;
+            document.getElementById('deckCountBadge').innerText = `${currentRoom.deck.length} / 52`;
+
+            // Active King Rules
+            const rulesBar = document.getElementById('activeRulesBar');
+            if (currentRoom.activeKingRule) {
+                rulesBar.classList.remove('hidden');
+                document.getElementById('activeRulesText').innerText = currentRoom.activeKingRule;
+            } else {
+                rulesBar.classList.add('hidden');
+            }
+
+            // Render Player Grid
+            const grid = document.getElementById('inGamePlayersGrid');
+            grid.innerHTML = currentRoom.players.map((p, idx) => {
+                const isCurrentTurn = idx === currentRoom.currentTurnIndex;
+                return `
+                    <div class="relative bg-slate-800/90 border-2 ${isCurrentTurn ? 'border-amber-400 card-glow-gold' : 'border-slate-700'} rounded-2xl p-3 flex flex-col justify-between transition-all">
+                        ${isCurrentTurn ? '<span class="absolute -top-2.5 -right-1 bg-amber-500 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider">กำลังจั่ว</span>' : ''}
+                        
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-8 h-8 rounded-full ${isCurrentTurn ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-300'} font-bold flex items-center justify-center shrink-0">
+                                ${p.name.charAt(0)}
+                            </div>
+                            <div class="overflow-hidden">
+                                <h4 class="font-extrabold text-xs text-white truncate">${p.name}</h4>
+                                <span class="text-[10px] text-slate-400">บทลงโทษ: <strong class="text-red-400 font-mono">${p.penalties || 0}</strong> ครั้ง</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-1 pt-2 border-t border-slate-700/60">
+                            <button onclick="addPenalty('${p.id}', 1)" class="w-full py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1">
+                                <i class="fa-solid fa-plus text-[9px]"></i> โดนทำโทษ
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Update Judge Feed
+            if (localUser.role === 'judge') {
+                renderJudgeCardFeed();
+            }
+
+            // Show reset deck button if host and deck empty
+            if (localUser.isHost && currentRoom.deck.length === 0) {
+                document.getElementById('btnResetDeck').classList.remove('hidden');
+            } else {
+                document.getElementById('btnResetDeck').classList.add('hidden');
+            }
+        }
+
+        function handleDrawCard() {
+            if (currentRoom.deck.length === 0) {
+                showToast('ไพ่หมดกองแล้ว! หัวหน้าห้องสามารถกดสับกองใหม่ได้');
+                return;
+            }
+
+            const activePlayer = currentRoom.players[currentRoom.currentTurnIndex];
+            
+            // Check if it's player's turn or if allowed
+            if (localUser.role === 'player' && activePlayer.id !== localUser.id) {
+                showToast('ยังไม่ถึงตาของคุณ! ตาของ ' + activePlayer.name);
+                return;
+            }
+
+            // Draw Top Card
+            const drawnCard = currentRoom.deck.pop();
+            drawnCard.drawnBy = activePlayer.name;
+            drawnCard.timestamp = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            currentRoom.drawnCards.unshift(drawnCard);
+
+            // Pass turn to next player
+            currentRoom.currentTurnIndex = (currentRoom.currentTurnIndex + 1) % currentRoom.players.length;
+
+            saveToLocalStorage();
+            showCardModal(drawnCard);
+            renderGameplayUI();
+
+            // Trigger Confetti for special cards like King or 5
+            if (drawnCard.rankCode === 'K' || drawnCard.rankCode === '5') {
+                confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+            }
+        }
+
+        function showCardModal(card) {
+            const modal = document.getElementById('cardModal');
+            document.getElementById('modalDrawnBy').innerText = card.drawnBy;
+            
+            // Set Modal Card Visuals
+            const topCorner = document.getElementById('modalTopCorner');
+            const centerSuit = document.getElementById('modalCenterSuit');
+            const bottomCorner = document.getElementById('modalBottomCorner');
+            const cardBox = document.getElementById('modalCardBox');
+
+            topCorner.innerHTML = `<span>${card.rankCode}</span><span>${card.suitSymbol}</span>`;
+            bottomCorner.innerHTML = `<span>${card.rankCode}</span><span>${card.suitSymbol}</span>`;
+            centerSuit.innerText = card.suitSymbol;
+
+            topCorner.className = `flex justify-between items-start text-xl font-extrabold ${card.suitColor}`;
+            bottomCorner.className = `flex justify-between items-end text-xl font-extrabold rotate-180 ${card.suitColor}`;
+            centerSuit.className = `text-5xl my-auto text-center ${card.suitColor}`;
+
+            document.getElementById('modalRuleTitle').innerText = card.ruleTitle;
+            document.getElementById('modalRuleDescription').innerText = card.ruleDesc;
+
+            // Custom King Rule Input Handle
+            const customBox = document.getElementById('modalCustomInputBox');
+            if (card.rankCode === 'K') {
+                customBox.classList.remove('hidden');
+            } else {
+                customBox.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function submitCustomRule() {
+            const input = document.getElementById('customRuleInput').value.trim();
+            if (input) {
+                currentRoom.activeKingRule = input;
+                saveToLocalStorage();
+                renderGameplayUI();
+                showToast('อัปเดตกฎพิเศษแล้ว!');
+            }
+            closeCardModal();
+        }
+
+        function closeCardModal() {
+            document.getElementById('cardModal').classList.add('hidden');
+        }
+
+        function addPenalty(playerId, amount) {
+            const target = currentRoom.players.find(p => p.id === playerId);
+            if (target) {
+                target.penalties = (target.penalties || 0) + amount;
+                saveToLocalStorage();
+                renderGameplayUI();
+                showToast(`เพิ่มบทลงโทษให้ ${target.name} แล้ว!`);
+            }
+        }
+
+        function renderJudgeCardFeed() {
+            const feed = document.getElementById('judgeCardFeed');
+            if (currentRoom.drawnCards.length === 0) {
+                feed.innerHTML = `<div class="text-xs text-purple-300/60 py-4 px-2 italic">ยังไม่มีการเปิดการ์ดเกิดขึ้นในห้องนี้...</div>`;
+                return;
+            }
+
+            feed.innerHTML = currentRoom.drawnCards.map(c => `
+                <div class="shrink-0 bg-slate-900 border border-purple-700/40 rounded-xl p-2.5 w-44 flex flex-col justify-between text-xs shadow-lg">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-extrabold text-amber-400 text-[11px] truncate">${c.drawnBy}</span>
+                        <span class="text-[9px] text-slate-500 font-mono">${c.timestamp}</span>
+                    </div>
+                    <div class="flex items-center gap-2 my-1 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
+                        <span class="font-black text-lg ${c.suitColor}">${c.rankCode} ${c.suitSymbol}</span>
+                        <div class="text-[10px] text-slate-300 font-semibold truncate leading-tight">${c.ruleTitle}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function resetDeckPrompt() {
+            if (confirm('คุณต้องการสับไพ่ใหม่ทั้ง 52 ใบใช่หรือไม่?')) {
+                currentRoom.deck = createDeck();
+                saveToLocalStorage();
+                renderGameplayUI();
+                showToast('สับไพ่ใหม่เรียบร้อยแล้ว!');
+            }
+        }
+
+        function leaveRoom() {
+            if (confirm('คุณต้องการออกจากห้องเกมนี้ใช่หรือไม่?')) {
+                localStorage.removeItem('ohana_room_' + currentRoom.code);
+                location.reload();
+            }
+        }
+
+        // Auto Sync State Polling for multi-browser simulation
+        setInterval(() => {
+            if (currentRoom.code) {
+                const updated = localStorage.getItem('ohana_room_' + currentRoom.code);
+                if (updated) {
+                    const parsed = JSON.parse(updated);
+                    // Sync if state updated externally
+                    if (JSON.stringify(parsed) !== JSON.stringify(currentRoom)) {
+                        currentRoom = parsed;
+                        if (currentRoom.status === 'playing' && gameplaySection.classList.contains('hidden')) {
+                            enterGame();
+                        } else if (currentRoom.status === 'playing') {
+                            renderGameplayUI();
+                        } else if (currentRoom.status === 'lobby') {
+                            renderLobbyLists();
+                        }
+                    }
+                }
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
